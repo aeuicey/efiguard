@@ -328,27 +328,69 @@ ipcMain.handle('disable-vbs', async () => {
   const logs = [];
   const push = (msg) => { logs.push(msg); return msg; };
 
-  const commands = [
+  push('[OK] 开始永久关闭 VBS 及相关虚拟化安全功能');
+
+  // 1. DISM 卸载 Hyper-V 相关功能
+  push('├── [系统功能] 卸载 Hyper-V 组件');
+  const dismCmds = [
     'dism /Online /Disable-Feature:microsoft-hyper-v-all /NoRestart',
     'dism /Online /Disable-Feature:IsolatedUserMode /NoRestart',
     'dism /Online /Disable-Feature:Microsoft-Hyper-V-Hypervisor /NoRestart',
     'dism /Online /Disable-Feature:Microsoft-Hyper-V-Online /NoRestart',
-    'dism /Online /Disable-Feature:HypervisorPlatform /NoRestart',
-    'bcdedit /set hypervisorlaunchtype off'
+    'dism /Online /Disable-Feature:HypervisorPlatform /NoRestart'
   ];
-
-  for (const cmd of commands) {
+  for (const cmd of dismCmds) {
     try {
-      const out = await runCmd(cmd);
-      push(`[OK] ${cmd}`);
-      if (out) push(out.slice(0, 800));
+      await runCmd(cmd);
+      push(`│   ├── [OK] ${cmd.split(' ')[3]}`);
     } catch (err) {
-      push(`[ERR] ${cmd}`);
-      push(String(err).slice(0, 500));
+      push(`│   ├── [WARN] ${cmd.split(' ')[3]} — ${String(err).slice(0, 100)}`);
     }
   }
 
-  // SecConfig.efi 逻辑
+  // 2. BCD 禁用 Hypervisor / VSM
+  push('├── [BCD] 禁用 Hypervisor / VSM 启动');
+  const bcdCmds = [
+    'bcdedit /set hypervisorlaunchtype off',
+    'bcdedit /set vsmlaunchtype off'
+  ];
+  for (const cmd of bcdCmds) {
+    try {
+      await runCmd(cmd);
+      push(`│   ├── [OK] ${cmd}`);
+    } catch (err) {
+      push(`│   ├── [WARN] ${cmd} — ${String(err).slice(0, 100)}`);
+    }
+  }
+
+  // 3. 注册表深度清理 — 覆盖所有 VBS / HVCI / Credential Guard 入口
+  push('├── [注册表] 锁定 VBS / HVCI / Credential Guard / KernelShadowStacks');
+  const regCmds = [
+    { path: 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\DeviceGuard', name: 'EnableVirtualizationBasedSecurity', val: '0' },
+    { path: 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\DeviceGuard', name: 'RequirePlatformSecurityFeatures', val: '0' },
+    { path: 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\DeviceGuard', name: 'Locked', val: '0' },
+    { path: 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\DeviceGuard\\Scenarios\\HypervisorEnforcedCodeIntegrity', name: 'Enabled', val: '0' },
+    { path: 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\DeviceGuard\\Scenarios\\HypervisorEnforcedCodeIntegrity', name: 'HVCIMATRequired', val: '0' },
+    { path: 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\DeviceGuard\\Scenarios\\HypervisorEnforcedCodeIntegrity', name: 'Locked', val: '0' },
+    { path: 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\DeviceGuard\\Scenarios\\CredentialGuard', name: 'Enabled', val: '0' },
+    { path: 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\DeviceGuard\\Scenarios\\KernelShadowStacks', name: 'Enabled', val: '0' },
+    { path: 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Lsa', name: 'LsaCfgFlags', val: '0' },
+    { path: 'HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\DeviceGuard', name: 'EnableVirtualizationBasedSecurity', val: '0' },
+    { path: 'HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\DeviceGuard', name: 'HypervisorEnforcedCodeIntegrity', val: '0' },
+    { path: 'HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\DeviceGuard', name: 'LsaCfgFlags', val: '0' },
+    { path: 'HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\DeviceGuard', name: 'HVCIMATRequired', val: '0' }
+  ];
+  for (const reg of regCmds) {
+    try {
+      await runCmd(`reg add "${reg.path}" /v "${reg.name}" /t REG_DWORD /d ${reg.val} /f`);
+      push(`│   ├── [OK] ${reg.path}\\${reg.name} = ${reg.val}`);
+    } catch (err) {
+      push(`│   ├── [WARN] ${reg.name} — ${String(err).slice(0, 100)}`);
+    }
+  }
+
+  // 4. SecConfig.efi — 下次启动时执行一次固件级禁用
+  push('├── [EFI] 部署 SecConfig.efi 启动项');
   try {
     const windir = process.env.WINDIR || 'C:\\Windows';
     const secConfig = path.join(windir, 'System32', 'SecConfig.efi');
@@ -363,15 +405,15 @@ ipcMain.handle('disable-vbs', async () => {
       await runCmd('bcdedit /set {0cb3b571-2f2e-4343-a879-d86a476d7215} loadoptions DISABLE-LSA-ISO,DISABLE-VBS');
       await runCmd('bcdedit /set {0cb3b571-2f2e-4343-a879-d86a476d7215} device partition=X:');
       await runCmd('mountvol X: /d');
-      push('[OK] SecConfig.efi 已部署到 ESP 并创建 BCD 启动项');
+      push('│   ├── [OK] SecConfig.efi → ESP (下次启动时执行一次禁用)');
     } else {
-      push(`[WARN] 未找到 SecConfig.efi: ${secConfig}`);
+      push('│   ├── [WARN] 未找到 SecConfig.efi');
     }
   } catch (err) {
-    push(`[ERR] SecConfig 部署失败: ${err}`);
+    push(`│   ├── [ERR] SecConfig 部署失败: ${err}`);
   }
 
-  push('\n[!] 请重启计算机使更改生效。\n[!] Please restart your computer for changes to take effect.');
+  push('└── [!] 重启后 VBS / HVCI / Credential Guard 将被永久禁用');
   return logs;
 });
 

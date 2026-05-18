@@ -1,0 +1,55 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build WPF
+        run: |
+          dotnet publish EfiGuardUI/EfiGuardUI.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained false `
+            -o ./artifacts/EfiGuardUI-WPF
+
+      - name: Build Electron
+        run: |
+          cd efiguard-ui
+          npm ci
+          npm run dist:dir
+
+      - name: Package artifacts
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "./artifacts/EfiGuardUI-WPF/*"       -DestinationPath "./EfiGuardUI-WPF.zip"
+          Compress-Archive -Path "./efiguard-ui/dist/win-unpacked/*" -DestinationPath "./EfiGuardUI-Electron.zip"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            EfiGuardUI-WPF.zip
+            EfiGuardUI-Electron.zip
+          generate_release_notes: true

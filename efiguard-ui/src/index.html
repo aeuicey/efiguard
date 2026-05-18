@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EfiGuard UI</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Particle Background -->
+  <canvas id="particle-canvas"></canvas>
+
+  <!-- Custom Title Bar -->
+  <div class="title-bar">
+    <div class="title-bar-left">
+      <span class="title-bar-icon">◈</span>
+      <span class="title-bar-text">EfiGuard UI</span>
+    </div>
+    <div class="title-bar-center">
+      <span class="nav-tab active" data-section="dashboard" data-i18n="nav_dashboard">仪表盘</span>
+      <span class="nav-tab" data-section="operations" data-i18n="nav_operations">操作</span>
+      <span class="nav-tab" data-section="logs" data-i18n="nav_logs">日志</span>
+    </div>
+    <div class="title-bar-right">
+      <button id="langBtn" class="title-bar-btn" title="切换语言">中/EN</button>
+      <button id="refreshBtn" class="title-bar-btn" title="刷新">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+      </button>
+      <div class="title-bar-divider"></div>
+      <button id="minBtn" class="title-bar-btn minimize" title="最小化">−</button>
+      <button id="maxBtn" class="title-bar-btn maximize" title="最大化">□</button>
+      <button id="closeBtn" class="title-bar-btn close" title="关闭">×</button>
+    </div>
+  </div>
+
+  <!-- Admin Banner -->
+  <div id="admin-banner" class="admin-banner" style="display:none;">
+    <div class="admin-banner-inner">
+      <span class="admin-banner-icon">⚠</span>
+      <span data-i18n="admin_warning">未以管理员身份运行。所有操作按钮已禁用。</span>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <!-- Dashboard Section -->
+    <section id="dashboard" class="section active">
+      <div class="hero-section">
+        <div class="hero-badge">
+          <span class="hero-badge-dot"></span>
+          <span data-i18n="live_monitoring">实时监控中</span>
+        </div>
+        <h1 class="hero-title" data-i18n="hero_title">系统安全中心</h1>
+        <p class="hero-subtitle" data-i18n="hero_subtitle">可视化管理系统虚拟化与安全功能状态</p>
+      </div>
+
+      <div class="status-grid" id="status-grid">
+        <!-- Cards will be injected by JS -->
+      </div>
+
+      <div class="info-footer">
+        <div class="info-footer-item">
+          <span class="info-footer-label" data-i18n="os_info">系统信息</span>
+          <span class="info-footer-value" id="os-info-text">--</span>
+        </div>
+        <div class="info-footer-divider"></div>
+        <div class="info-footer-item">
+          <span class="info-footer-label" data-i18n="last_updated">最后更新</span>
+          <span class="info-footer-value" id="last-updated">--</span>
+        </div>
+        <div class="info-footer-divider"></div>
+        <div class="info-footer-item">
+          <span class="info-footer-label" data-i18n="refresh_interval">刷新间隔</span>
+          <span class="info-footer-value">5s</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Operations Section -->
+    <section id="operations" class="section">
+      <div class="hero-section">
+        <div class="hero-badge">
+          <span class="hero-badge-dot orange"></span>
+          <span data-i18n="system_ops">系统操作</span>
+        </div>
+        <h1 class="hero-title" data-i18n="ops_title">操作中心</h1>
+        <p class="hero-subtitle" data-i18n="ops_subtitle">管理 VBS 与 EfiGuard 启动配置</p>
+      </div>
+
+      <div class="ops-grid">
+        <div class="ops-card glow-red">
+          <div class="ops-card-header">
+            <div class="ops-card-icon">🛡</div>
+            <div class="ops-card-meta">
+              <h2 data-i18n="disable_vbs_title">关闭 VBS</h2>
+              <span class="ops-card-tag" data-i18n="tag_danger">高风险</span>
+            </div>
+          </div>
+          <p class="ops-card-desc" data-i18n="disable_vbs_desc">
+            关闭基于虚拟化的安全功能和所有 Hyper-V 相关组件。将修改 Windows 可选功能和 BCD 配置，重启后生效。
+          </p>
+          <div class="ops-card-actions">
+            <button id="btnDisableVbs" class="btn-danger">
+              <span data-i18n="btn_disable_vbs">立即关闭 VBS</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="ops-card glow-blue">
+          <div class="ops-card-header">
+            <div class="ops-card-icon">⚡</div>
+            <div class="ops-card-meta">
+              <h2 data-i18n="install_efiguard_title">安装 EfiGuard</h2>
+              <span class="ops-card-tag" data-i18n="tag_advanced">高级</span>
+            </div>
+          </div>
+          <p class="ops-card-desc" data-i18n="install_efiguard_desc">
+            将预打包的 EfiGuard v1.3 部署到 EFI 系统分区并创建 BCD 启动项。EfiGuard 会在启动时禁用 PatchGuard 和驱动签名强制 (DSE)。
+          </p>
+          <div class="ops-card-actions">
+            <button id="btnInstallEfi" class="btn-primary">
+              <span data-i18n="btn_install_efi">一键安装到 ESP</span>
+            </button>
+          </div>
+          <div id="efi-status" class="efi-status"></div>
+        </div>
+      </div>
+
+      <div class="warning-panel" id="warning-panel">
+        <div class="warning-panel-icon">!</div>
+        <div class="warning-panel-body">
+          <strong data-i18n="warn_title">重要提示</strong>
+          <p data-i18n="warn_hvci">EfiGuard 无法禁用 HVCI（内存完整性）。如果 HVCI 处于启用状态，EfiGuard 的 DSE 绕过将无效。</p>
+          <p data-i18n="warn_reboot">所有系统级修改都需要重启计算机才能生效。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Logs Section -->
+    <section id="logs" class="section">
+      <div class="hero-section">
+        <div class="hero-badge">
+          <span class="hero-badge-dot"></span>
+          <span data-i18n="system_logs">系统日志</span>
+        </div>
+        <h1 class="hero-title" data-i18n="logs_title">操作日志</h1>
+        <p class="hero-subtitle" data-i18n="logs_subtitle">命令执行输出与状态记录</p>
+      </div>
+
+      <div class="logs-panel">
+        <div class="logs-header">
+          <span class="logs-header-dot"></span>
+          <span data-i18n="logs_live">实时输出</span>
+          <button id="clearLogsBtn" class="logs-clear-btn" data-i18n="clear_logs">清空</button>
+        </div>
+        <pre id="logs-output" class="logs-pre"><span class="logs-placeholder" data-i18n="logs_placeholder">等待操作执行...</span></pre>
+      </div>
+    </section>
+  </main>
+
+  <!-- Scanline Overlay -->
+  <div class="scanlines"></div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

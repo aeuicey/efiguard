@@ -414,22 +414,33 @@ ipcMain.handle('install-efiguard-bundled', async () => {
     const espBoot = 'X:\\EFI\\Boot';
     if (!fs.existsSync(espBoot)) fs.mkdirSync(espBoot, { recursive: true });
 
+    push('[OK] 开始部署 EfiGuard 到 EFI 系统分区');
+    push('├── 📁 挂载 ESP → X:\\EFI\\Boot');
+
     fs.copyFileSync(path.join(EFIGUARD_ASSETS, guardDxe), path.join(espBoot, 'EfiGuardDxe.efi'));
-    push(`[OK] 已复制 EfiGuardDxe.efi 到 ESP`);
+    push('├── 📄 EfiGuardDxe.efi  → 已写入');
 
     fs.copyFileSync(path.join(EFIGUARD_ASSETS, loader), path.join(espBoot, 'Loader.efi'));
-    push(`[OK] 已复制 Loader.efi 到 ESP`);
+    push('└── 📄 Loader.efi       → 已写入');
 
-    // BCD 启动项
+    // BCD 启动项（复制 {bootmgr} 并添加到固件启动菜单）
     try {
-      const copyOut = await runCmd('bcdedit /copy {current} /d "EfiGuard Loader"');
+      const copyOut = await runCmd('bcdedit /copy {bootmgr} /d "EfiGuard Loader"');
       const guidMatch = copyOut.match(/\{([^}]+)\}/);
       if (guidMatch) {
         const guid = guidMatch[1];
         await runCmd(`bcdedit /set {${guid}} device partition=X:`);
         await runCmd(`bcdedit /set {${guid}} path \\EFI\\Boot\\Loader.efi`);
         await runCmd(`bcdedit /set {${guid}} description "EfiGuard Loader"`);
-        push(`[OK] 已创建 BCD 启动项 {${guid}}`);
+        await runCmd(`bcdedit /set {fwbootmgr} displayorder {${guid}} /addfirst`);
+        push('[OK] 创建 UEFI 固件启动项');
+        push('├── 📝 复制源:   {bootmgr}');
+        push('├── 📝 启动项:   EfiGuard Loader');
+        push(`├── 📝 GUID:     {${guid}}`);
+        push('├── 📝 路径:     \\EFI\\Boot\\Loader.efi');
+        push('└── 📝 菜单位置: 固件启动菜单首位');
+      } else {
+        push('[WARN] 未能从 bcdedit 输出中提取 GUID');
       }
     } catch (bcdErr) {
       push(`[WARN] BCD 配置: ${bcdErr.message || bcdErr}`);
